@@ -32,8 +32,10 @@ class Bot545046(Bot):
 		self.known_map = self.add_walls_to_map(self.init_empty_map())
 		self.potential_stains_map = self.init_empty_map()
 
+		self.location_history = []  # note that back-tracking deletes visited cells!
+
 		self.move_stain_history = []
-		self.last_move = "trajectory"
+		self.last_move = "explore"
 
 	def deepcopy(self, grid):
 		return [row[:] for row in grid]
@@ -61,6 +63,18 @@ class Bot545046(Bot):
 		for row in grid:
 			print(''.join(row))
 		print()
+
+	# TO DO: Find direction to move from cell_star to adjacent cell_end (not diagonal)
+	# BUG: does not account for cells that are diagonal
+	def find_direction(self, cell_start, cell_end):
+		if cell_end[0] < cell_start[0]:  # end is above start
+			return UP
+		elif cell_end[0] > cell_start[0]:  # end is below start
+			return DOWN
+		elif cell_end[1] > cell_start[1]:  # end is right of start
+			return RIGHT
+		elif cell_end[1] < cell_start[1]:  # end is left of start
+			return LEFT
 
 	# Identify all unexplored (!) locations where stains may exist, given memory (note that this ignores visible stains!)
 	def identify_potential_stains(self, stains_map, known_map):
@@ -105,8 +119,22 @@ class Bot545046(Bot):
 					num_chars += 1
 		return num_chars
 
+	# TO DO: Generate move towards previous cell
+	def move_backtrack(self, currentCell):
+
+		# find direction to get to previous cell
+		direction_to_previous = self.find_direction(currentCell, self.location_history[-2])
+
+		# delete current location and previous location
+		# (when moved to previous location, this location will be appended to location_history by nextMove)
+		del self.location_history[-1:-3:-1]
+
+		return direction_to_previous
+
 	# Generate move according to pre-determined trajectory, which is as wide as possible without missing stains
-	def move_trajectory(self, currentCell):
+	def move_explore_trajectory(self, currentCell):
+
+		self.last_move = "explore"
 
 		current_row = currentCell[0]
 		current_col = currentCell[1]
@@ -154,9 +182,9 @@ class Bot545046(Bot):
 
 	# Generate move according to what will explore the most space
 	# TO DO: generate move in case all directions have gain=0
-	def move_explore(self, currentCell, vision):
+	def move_explore_gain(self, currentCell, vision):
 
-		# Gain depends on the number of potential stain-containing cells the move would exclude
+		self.last_move = "explore"
 
 		possible_cells = {
 			#       row                 column
@@ -203,11 +231,13 @@ class Bot545046(Bot):
 				# compare
 				gain = current_potential_stains - hyp_potential_stains
 
-			return gain
 
+			return gain
 		# iterate through all 4 possible moves
 		for move in possible_cells:
 			gain_per_direction[move] = get_gain_per_direction(possible_cells[move])
+
+		self.print_grid(self.known_map)
 
 		# print()
 		# print("Cells that would be excluded from containing stains:")
@@ -219,11 +249,22 @@ class Bot545046(Bot):
 		# print("Best movement: " + str(max(gain_per_direction, key=gain_per_direction.get)))
 		# print()
 
+		# print(self.location_history)
+		# print(gain_per_direction[max(gain_per_direction, key=gain_per_direction.get)])
+
+		# if all directions have gain=0, retrace steps
+		if gain_per_direction[max(gain_per_direction, key=gain_per_direction.get)] == 0:
+			#  retrace steps
+			print("backtracking")
+			return self.move_backtrack(currentCell)
+
 		# return move with largest gain-value
 		return max(gain_per_direction, key=gain_per_direction.get)
 
 	# TO DO: Generate move to clean up stain in vision
 	def move_stain(self, vision, currentCell, lastMove):
+
+		self.last_move = "stain"
 
 		# Keep history of moves since encountering first stain-cell
 		if lastMove != "stain":
@@ -243,32 +284,40 @@ class Bot545046(Bot):
 
 	# TO DO: Generate move to get around obstacle
 	def move_obstacle(self, vision, currentCell, lastMove):
+
+		self.last_move = "obstacle"
+
 		print("to do")
+
+
+
 
 	def nextMove(self, currentCell, currentEnergy, vision, remainingStainCells):
 
+		# update memory
 		self.known_map = self.add_vision_to_map(currentCell, vision, self.known_map)
+
+		# identify potential stains
 		self.potential_stains_map = self.identify_potential_stains(self.potential_stains_map, self.known_map)
 
-		# print("🧠  Robot-memory:")
-		# self.print_grid(self.knownMap)
+		# add current location to history (note that back-tracking deletes visited locations!)
+		self.location_history.append(currentCell.copy())
 
-		# print("🔎  Potential stains:")
-		# self.print_grid(self.potentialStainsMap)
-
+		# if no stains or obstacles in sight
 		if self.chars_in_grid(vision, "@") is False and self.chars_in_grid(vision, "x") is False:
-			self.last_move = "trajectory"
+			print("No stains / obstacles in sight")
 
+
+		return self.move_explore_gain(currentCell, vision)
+
+		# if stains in sight
 		if self.chars_in_grid(vision, "@"):
 			print("🗑️🧹 Stains in sight: " + str(self.chars_in_grid(vision, "@")))
-			# currentMove = self.move_stain(vision, currentCell, self.lastMove)
-			# self.lastMove = "stain"
-			# return currentMove
+			# return self.move_stain(vision, currentCell, self.lastMove
 
+		# if obstacles in sight
 		if self.chars_in_grid(vision, "x"):
 			print("🚧⛔ Obstacles in sight: " + str(self.chars_in_grid(vision, "x")))
-			# currentMove = self.move_obstacle(vision, currentCell, self.lastMove)
-			# self.lastMove = "obstacle"
-			# return currentMove
+			# return self.move_obstacle(vision, currentCell, self.lastMove)
 
-		return self.move_explore(currentCell, vision)
+
