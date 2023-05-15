@@ -71,6 +71,20 @@ class Bot545046(Bot):
 		elif cell_end[1] < cell_start[1]:  # end is left of start
 			return LEFT
 
+	# rectilinear distance from cell_start to cell_end
+	def dist_rect(self, cell_start, cell_end):
+		# Manhattan distance = absolute horizontal dist. + abs. vert. dist.
+		return abs(cell_end[0] - cell_start[0]) + abs(cell_end[1] - cell_start[1])
+
+	# return dictionary with cell-coordinates of 4 adjacent cells
+	def get_adjacent_cells(self, cell_current):
+		return {
+				#       row                 column
+				UP:    [cell_current[0] - 1, cell_current[1]    ],
+				DOWN:  [cell_current[0] + 1, cell_current[1]    ],
+				RIGHT: [cell_current[0]    , cell_current[1] + 1],
+				LEFT:  [cell_current[0]    , cell_current[1] - 1]
+			}
 	
 	# Identify all unexplored (!) locations where stains may exist, given memory (note that this ignores visible stains!)
 	def identify_potential_stains(self, stains_map, known_map):
@@ -172,13 +186,14 @@ class Bot545046(Bot):
 
 		self.last_move = "explore"
 
-		adjacent_cells = {
-			#       row                 column
-			UP:    [currentCell[0] - 1, currentCell[1]    ],
-			DOWN:  [currentCell[0] + 1, currentCell[1]    ],
-			RIGHT: [currentCell[0]    , currentCell[1] + 1],
-			LEFT:  [currentCell[0]    , currentCell[1] - 1]
-		}
+		adjacent_cells = self.get_adjacent_cells(currentCell)
+		# {
+		# 	#       row                 column
+		# 	UP:    [currentCell[0] - 1, currentCell[1]    ],
+		# 	DOWN:  [currentCell[0] + 1, currentCell[1]    ],
+		# 	RIGHT: [currentCell[0]    , currentCell[1] + 1],
+		# 	LEFT:  [currentCell[0]    , currentCell[1] - 1]
+		# }
 
 		def get_gain_per_direction(cell):
 			gain = 0
@@ -204,8 +219,6 @@ class Bot545046(Bot):
 				# count number of potential stains after move
 				hyp_potential_stains = self.chars_in_grid(map_potential_stains_hyp, "?")
 
-				self.print_grid(map_potential_stains_hyp)
-
 				# compare
 				gain = num_potential_stains - hyp_potential_stains
 
@@ -223,7 +236,7 @@ class Bot545046(Bot):
 
 	# TO DO: return direction of first step in path (A*) from cell_start to cell_end, if possible
 	# see https://www.youtube.com/watch?v=-L-WgKMFuhE 
-	# see https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode 
+	# see https://en.wikipedia.org/wiki/A*_search_algorith	m#Pseudocode 
 	def move_path(self, cell_start, cell_end):
 
 		# is cell_start or cell_end an obstacle?
@@ -245,19 +258,13 @@ class Bot545046(Bot):
 		# start algorithm from cell_start
 		cell_current = cell_start
 
-		# rectilinear distance from cell_start to cell_end
-		def dist_rect(cell_start, cell_end):
-			# Manhattan distance = absolute horizontal dist. + abs. vert. dist.
-			return abs(cell_end[0] - cell_start[0]) + abs(cell_end[1] - cell_start[1])
-
 		# f-cost of cell (based on distance to cell_start and cell_end)
 		def get_f_cost(cell):
 			# if cell is obstacle, cost is "x"
 			if self.map_known[adjacent_cells[move][0]][adjacent_cells[move][1]] == "x":
 				return "x"
 			else: # else, return f-cost = g-cost (distance to start) + h-cost (distance to end)
-				return dist_rect(cell_start, adjacent_cells[move]) + dist_rect(cell_end, adjacent_cells[move])
-			
+				return self.dist_rect(cell_start, adjacent_cells[move]) + self.dist_rect(cell_end, adjacent_cells[move])
 			
 		# for every cell to evaluate (until path is found, or cannot be found)
 		for i in range(0, 12): # for testing
@@ -267,13 +274,7 @@ class Bot545046(Bot):
 
 			map_visited[cell_current[0]][cell_current[1]] = '!'  # note evaluated cell
 
-			adjacent_cells = {
-				#       row                 column
-				UP:    [cell_current[0] - 1, cell_current[1]    ],
-				DOWN:  [cell_current[0] + 1, cell_current[1]    ],
-				RIGHT: [cell_current[0]    , cell_current[1] + 1],
-				LEFT:  [cell_current[0]    , cell_current[1] - 1]
-			}
+			adjacent_cells = self.get_adjacent_cells(cell_current)
 
 			# for every adjacent cell
 			for move in adjacent_cells: 
@@ -311,8 +312,6 @@ class Bot545046(Bot):
 			# (temporary) simply assign one of the lowest values
 			cell_current = adjacent_cells[min(cost_per_direction, key=cost_per_direction.get)] # choose cell with lowest cost (W.I.P.!)
 
-			self.print_grid(map_path)
-
 		
 		print("TO DO")
 
@@ -329,6 +328,44 @@ class Bot545046(Bot):
 
 		print("to do")
 
+	# TODO: Reconstruct path according to A* algorithm
+	
+
+	# TODO: A* algorithm with h=distance to goal
+	# pseudocode
+	# f-cost = g-cost + h-cost
+	# g = dist. to start
+	# h = dist. to end
+	# def a_star(self, cell_start, cell_end):
+		
+
+	# 	def get_g_cost(cell_start, cell_current):  # dist. to start
+	# 		return self.dist_rect(cell_start, cell_current)
+	# 	def get_h_cost(cell_end, cell_current):  # dist. to end
+	# 		return self.dist_rect(cell_end, cell_current)
+	# 	def get_f_cost(cell_start, cell_current, cell_end):  # f-cost
+	# 		return get_g_cost(cell_start, cell_current)+get_h_cost(cell_end, cell_current)
+
+	# 	cells_open = [[cell_start,
+	# 	 	get_g_cost(cell_start, cell_start),
+	# 		get_f_cost(cell_start, cell_start, cell_end)]]
+	# 	cells_closed = []
+
+	# 	while cells_open:
+	# 		cell_current = min(f_score, key=cells_open) # get cell for min. f_score
+	# 		if cell_current == cell_end: pass # return reconstruct_path(came_from, current)
+	# 		cells_open.remove(cell_current)
+	# 		cells_closed.append(cell_current)
+	# 		for cell_adjacent in self.get_adjacent_cells(cell_current):
+	# 			if cell_adjacent in cells_closed or cell_adjacent == "x":
+	# 				continue
+
+	# 			tentative_g_cost = get_g_cost(cell_adjacent)
+	# 			if tentative_g_score < g_score[cell_adjacent]:
+	# 				came_from[cell_adjacent] = cell_current
+	# 				f_score[cell_adjacent] = tentative_g_score + h_score
+	# 				if cell_adjacent not in cells_open: cells_open.add(cell_adjacent)
+	# 	return 0
 
 	def nextMove(self, currentCell, currentEnergy, vision, remainingStainCells):
 
@@ -349,5 +386,7 @@ class Bot545046(Bot):
 		# clean up stain
 			print("to do")
 		'''
+
+		print(self.location_history)
 
 		return self.move_explore_dynamic(currentCell)

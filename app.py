@@ -319,7 +319,7 @@ settings = {
 }
 
 MAX_STEPS = 1000
-LATENCY = .05
+LATENCY = .1
 VISUALS = True
 CLS = True
 
