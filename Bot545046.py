@@ -31,6 +31,8 @@ class Bot545046(Bot):
 
 		self.location_history = []  # note that back-tracking deletes visited cells!
 
+		self.stain_locations = [] # store known stains
+
 		self.move_stain_history = []
 		self.last_move = "explore"
 
@@ -119,8 +121,26 @@ class Bot545046(Bot):
 		return stains_map
 
 	# Return number of occurrences of char in grid (0 if none)
-	def chars_in_grid(self, grid, char):
+	def count_chars_in_grid(self, grid, char):
 		return len([cell for row in grid for cell in row if cell == char])
+
+	# Return locations of occurences of char in grid (empty list if none)
+	# TODO: currently returns contents instead of coordinates
+	def find_chars_in_grid(self, grid, char):
+		return [[nRow, nCol] for nRow in range(0, len(grid)) for nCol in range(0, len(grid[nRow])) if grid[nRow][nCol] == char]
+
+	# convert a location in vision to the corresponding location in the map
+	def convert_loc_vision_to_map(self, current_cell, vision, loc_in_vision):
+		# vision[1, 1] corresponds to map[current_cell[0], current_cell[1]]
+
+		return [current_cell[0] + (loc_in_vision[0] - 1), current_cell[1] + (loc_in_vision[1] - 1)]
+
+
+
+
+
+
+		pass
 
 	# Generate move towards previous cell
 	def move_backtrack(self, currentCell):
@@ -210,14 +230,14 @@ class Bot545046(Bot):
 				# add hypothetical vision after move to map
 				map_known_hyp = self.add_vision_to_map(cell, vision_hyp, map_known_hyp)
 
-				num_potential_stains = self.chars_in_grid(self.map_potential_stains, "?")
+				num_potential_stains = self.count_chars_in_grid(self.map_potential_stains, "?")
 
 				# identify potential stains in hypothetical map
 				map_potential_stains_hyp = self.deepcopy(self.map_potential_stains)
 				map_potential_stains_hyp = self.identify_potential_stains(map_potential_stains_hyp, map_known_hyp)
 
 				# count number of potential stains after move
-				hyp_potential_stains = self.chars_in_grid(map_potential_stains_hyp, "?")
+				hyp_potential_stains = self.count_chars_in_grid(map_potential_stains_hyp, "?")
 
 				# compare
 				gain = num_potential_stains - hyp_potential_stains
@@ -321,12 +341,13 @@ class Bot545046(Bot):
 
 		self.last_move = "stain"
 
-		# Keep history of moves since encountering first stain-cell
-		if lastMove != "stain":
-			self.move_stain_history = []
-		self.move_stain_history.append(currentCell.copy())
+		print("TO DO")
+		return LEFT
 
-		print("to do")
+
+
+
+
 
 	# TODO: Reconstruct path according to A* algorithm
 	
@@ -372,21 +393,31 @@ class Bot545046(Bot):
 		# update memory of map
 		self.map_known = self.add_vision_to_map(currentCell, vision, self.map_known)
 
+		self.print_grid(self.map_known)
+
+		# if stains in sight, add to list 'stain_locations'
+		if self.count_chars_in_grid(vision, "@"):
+			for location_vision in self.find_chars_in_grid(vision, "@"):
+				location_map = self.convert_loc_vision_to_map(currentCell, vision, location_vision)
+				if location_map not in self.stain_locations:
+					self.stain_locations.append(location_map)
+		
+		# if stain visited, remove from list 'stain_locations'
+		if currentCell in self.stain_locations:
+			self.stain_locations.remove(currentCell)
+
+		print(self.stain_locations)
 		# add current location to history (note that back-tracking deletes visited locations!)
 		self.location_history.append(currentCell.copy())
 
 		# identify potential stains
 		self.map_potential_stains = self.identify_potential_stains(self.map_potential_stains, self.map_known)
 
-		'''
-		# if no stains in sight, explore
-		if self.chars_in_grid(vision, "@") is False:
-			return self.move_explore_dynamic(currentCell, vision)
+		# if no stains in memory, explore
+		if self.stain_locations:
+			# if stains in sight, clean up stain
+			#return self.move_stain(vision, currentCell, self.last_move)
+			return self.move_explore_dynamic(currentCell)
 		else:
-		# clean up stain
-			print("to do")
-		'''
-
-		print(self.location_history)
-
-		return self.move_explore_dynamic(currentCell)
+			# if no stains in sight, explore
+			return self.move_explore_dynamic(currentCell)
