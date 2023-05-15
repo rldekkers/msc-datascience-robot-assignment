@@ -1,5 +1,5 @@
 .idea # PyCharm settings
 
-__pycache__ # Python cache
+__pycache__/ # Python cache
 
 .ipynb_checkpoints # Python notebook manual saves
