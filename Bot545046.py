@@ -4,9 +4,7 @@ class Bot545046(Bot):
 
 	# Initialize grid for storing memory of map
 	def init_empty_map(self):
-		empty_map = [['?' for col in range(self.settings['nrCols'])] for row in range(self.settings['nrRows'])]
-
-		return empty_map
+		return [['?' for col in range(self.settings['nrCols'])] for row in range(self.settings['nrRows'])]
 
 	# Add outer walls to map
 	def add_walls_to_map(self, map):
@@ -18,27 +16,31 @@ class Bot545046(Bot):
 			map[j][self.settings['nrRows']-1] = 'x'	 # right
 		return map
 
+	# generate a list of exploration targets for A*, taking into account stainsize
+	def generate_exploration_targets(self):
+		
+		return [[row, col] for col in range(1, self.settings['nrCols'] - 2, self.settings['sizeStains']) for row in range(1, self.settings['nrRows'] - 2, self.settings['sizeStains'])]
+
 	def __init__(self, settings):
 		super().__init__(settings)
 
 		self.setName('Robertbot')
-
 		self.settings = settings
 
 		self.map_known = self.add_walls_to_map(self.init_empty_map())
 		self.map_potential_stains = self.init_empty_map()
 
-		self.location_history = []  # note that back-tracking deletes visited cells!
+		self.locations_exploration_targets = self.generate_exploration_targets # tentative targets for A*
+		self.locations_history = []  # note that back-tracking deletes visited cells!
+		self.locations_stains = [] # store known stains
 
-		self.stain_locations = [] # store known stains
+		self.path_a_star = [] # path which is currently begin traversed
 
-		self.move_stain_history = []
-		self.last_move = "explore"
+		self.move_previous = "explore"
 
-	def deepcopy(self, grid):
+	def deepcopy_grid(self, grid):
 		return [row[:] for row in grid]
 
-	# Add current vision to memory of map
 	def add_vision_to_map(self, currentCell, vision, map):
 		current_row = currentCell[0]
 		current_col = currentCell[1]
@@ -56,7 +58,6 @@ class Bot545046(Bot):
 
 		return map
 
-	# Print grid
 	def print_grid(self, grid):
 		for row in grid: print(''.join(row))
 		print()
@@ -72,12 +73,12 @@ class Bot545046(Bot):
 		elif cell_end[1] < cell_start[1]:  # end is left of start
 			return LEFT
 
-	# rectilinear distance from cell_start to cell_end
+	# rectilinear distance
 	def dist_rect(self, cell_start, cell_end):
 		# Manhattan distance = absolute horizontal dist. + abs. vert. dist.
 		return abs(cell_end[0] - cell_start[0]) + abs(cell_end[1] - cell_start[1])
 
-	# return dictionary with cell-coordinates of 4 adjacent cells
+	# return dictionary with cell-coordinates of 4 adjacent cells, e.g. { "LEFT": [1,1], ... }
 	def get_adjacent_cells(self, cell_current):
 		return {
 				#       row                 column
@@ -124,15 +125,14 @@ class Bot545046(Bot):
 		return len([cell for row in grid for cell in row if cell == char])
 
 	# Return locations of occurences of char in grid (empty list if none)
-	# TODO: currently returns contents instead of coordinates
 	def find_chars_in_grid(self, grid, char):
 		return [[nRow, nCol] for nRow in range(0, len(grid)) for nCol in range(0, len(grid[nRow])) if grid[nRow][nCol] == char]
 
-	# convert a location in vision to the corresponding location in the map
-	def convert_loc_vision_to_map(self, current_cell, vision, loc_in_vision):
-		# vision[1, 1] corresponds to map[current_cell[0], current_cell[1]]
+	# Convert location in vision to the corresponding location in the map
+	def convert_loc_vision_to_map(self, cell_current, vision, loc_in_vision):
+		# vision[1, 1] corresponds to map[cell_current[0], cell_current[1]]
 
-		return [current_cell[0] + (loc_in_vision[0] - 1), current_cell[1] + (loc_in_vision[1] - 1)]
+		return [cell_current[0] + (loc_in_vision[0] - 1), cell_current[1] + (loc_in_vision[1] - 1)]
 
 
 
@@ -141,20 +141,20 @@ class Bot545046(Bot):
 
 		pass
 
-	# Generate move towards previous cell
+	# Determine move towards previous cell (according to 'location_history')
 	def move_backtrack(self, currentCell):
 
 		# delete current location and previous location
 		# (when moved to previous location, this location will be appended to location_history by nextMove)
-		del self.location_history[-1:-3:-1]
+		del self.locations_history[-1:-3:-1]
 		
 		# find direction to get to previous cell
-		return self.find_direction(currentCell, self.location_history[-2])
+		return self.find_direction(currentCell, self.locations_history[-2])
 
 	# Return move according to trajectory, which is as wide as possible without missing stains
 	def move_explore_trajectory(self, currentCell):
 
-		self.last_move = "explore"
+		self.move_previous = "explore"
 
 		current_row = currentCell[0]
 		current_col = currentCell[1]
@@ -203,7 +203,7 @@ class Bot545046(Bot):
 	# Generate move according to what will explore the most space
 	def move_explore_dynamic(self, currentCell):
 
-		self.last_move = "explore"
+		self.move_previous = "explore"
 
 		adjacent_cells = self.get_adjacent_cells(currentCell)
 		# {
@@ -221,7 +221,7 @@ class Bot545046(Bot):
 				gain = 0  # an obstacle prevents the move
 			else:
 				# visualize explored territory in hypothetical map
-				map_known_hyp = self.deepcopy(self.map_known)
+				map_known_hyp = self.deepcopy_grid(self.map_known)
 
 				# create fake vision
 				vision_hyp = [['$' for i in range(3)] for j in range(3)]
@@ -232,7 +232,7 @@ class Bot545046(Bot):
 				num_potential_stains = self.count_chars_in_grid(self.map_potential_stains, "?")
 
 				# identify potential stains in hypothetical map
-				map_potential_stains_hyp = self.deepcopy(self.map_potential_stains)
+				map_potential_stains_hyp = self.deepcopy_grid(self.map_potential_stains)
 				map_potential_stains_hyp = self.identify_potential_stains(map_potential_stains_hyp, map_known_hyp)
 
 				# count number of potential stains after move
@@ -256,197 +256,161 @@ class Bot545046(Bot):
 			# TODO: distinguish between multiple moves with the same gain-value
 			return max(gain_per_direction, key=gain_per_direction.get)  # return move with largest gain-value
 
-	# TO DO: return direction of first step in path (A*) from cell_start to cell_end, if possible
-	# see https://www.youtube.com/watch?v=-L-WgKMFuhE 
-	# see https://en.wikipedia.org/wiki/A*_search_algorith	m#Pseudocode 
-	def move_path(self, cell_start, cell_end):
-
-		# is cell_start or cell_end an obstacle?
-		if self.map_known[cell_start[0]][cell_start[1]] == "x" or self.map_known[cell_end[0]][cell_end[1]] == "x":
-			return 0
-
-		# generate maps for storing f-cost per cell, and for storing visited cells
-		map_path = self.deepcopy(self.map_known)
-		map_visited = self.init_empty_map()
-
-		# temporary storage for cost in each iteration (perhaps not necessary?)
-		cost_per_direction = {
-			UP: 0,
-			DOWN: 0,
-			RIGHT: 0,
-			LEFT: 0
-		}
-
-		# start algorithm from cell_start
-		cell_current = cell_start
-
-		# f-cost of cell (based on distance to cell_start and cell_end)
-		def get_f_cost(cell):
-			# if cell is obstacle, cost is "x"
-			if self.map_known[adjacent_cells[move][0]][adjacent_cells[move][1]] == "x":
-				return "x"
-			else: # else, return f-cost = g-cost (distance to start) + h-cost (distance to end)
-				return self.dist_rect(cell_start, adjacent_cells[move]) + self.dist_rect(cell_end, adjacent_cells[move])
-			
-		# for every cell to evaluate (until path is found, or cannot be found)
-		for i in range(0, 12): # for testing
-		# while True:
-			
-			if cell_current == cell_end: break  # path found
-
-			map_visited[cell_current[0]][cell_current[1]] = '!'  # note evaluated cell
-
-			adjacent_cells = self.get_adjacent_cells(cell_current)
-
-			# for every adjacent cell
-			for move in adjacent_cells: 
-
-				# Save f_cost in map_path
-				map_path[adjacent_cells[move][0]][adjacent_cells[move][1]] = str(get_f_cost(adjacent_cells[move]))
+	# used by 'get_path_a_star()'
+	def reconstruct_path(self, came_from, cell_end):
+		path = []
+		cell_current = cell_end
+		if tuple(cell_end) not in list(came_from.keys()): # correct?
+			return [] # no path found
 		
+		# TEST!
+		path.append(cell_end)
 
-			# ! TODO: prioritize unvisited cells over lower cells!!!
-			# currently, lower cells are prioritized over unvisited cells
+		while tuple(cell_current) in list(came_from.keys()):
+			cell_current = came_from[tuple(cell_current)]
+			path.insert(0, cell_current)
 
+		del path[0]
 
-
-			# dict of cost-scores of adjacent cells, excluding obstacles, taken from map_path
-			cost_per_direction = {move: int(map_path[adjacent_cells[move][0]][adjacent_cells[move][1]]) for move in adjacent_cells if map_path[adjacent_cells[move][0]][adjacent_cells[move][1]].isnumeric()}
-
-			# find lowest value and filter out entries with higher value
-			lowest_cost = min(cost_per_direction.values())
-			cost_per_direction = {move: cost_per_direction[move] for move in cost_per_direction.keys() if cost_per_direction[move] == lowest_cost}
-			
-			if len(cost_per_direction) == 1:  # if only one option left, choose that one
-				cell_current = adjacent_cells[list(cost_per_direction.items())[0][0]]
-			elif len(cost_per_direction) > 1: # if multiple options left...
-				
-				# if un-visited cells left in options...
-				if {move: cost_per_direction[move] for move in cost_per_direction if map_visited[adjacent_cells[move][0]][adjacent_cells[move][1]] != "!"}:
-					# choose one of the not visited cells
-					print("to do")
-
-				# TODO: choose the one not visited yet
-				# if all have been visited, choose the previous one?
-
-				print("to do")
-
-			# (temporary) simply assign one of the lowest values
-			cell_current = adjacent_cells[min(cost_per_direction, key=cost_per_direction.get)] # choose cell with lowest cost (W.I.P.!)
-
-		
-		print("TO DO")
-
-	# TO DO: Generate move to clean up stain in vision
-	# consider the possibility that the bot encounters a 2nd stain while attempting to clean up the current one
-	def move_stain(self, vision, currentCell, lastMove):
-
-		self.last_move = "stain"
-
-		print("TO DO")
-		
-
-	# TODO: Reconstruct path according to A* algorithm
-	
-
-	# TODO: A* algorithm with h=distance to goal
-	# pseudocode
-	# f-cost = g-cost + h-cost
-	# g = dist. to start
-	# h = dist. to end
-	# def a_star(self, cell_start, cell_end):
-		
-
-	# 	def get_g_cost(cell_start, cell_current):  # dist. to start
-	# 		return self.dist_rect(cell_start, cell_current)
-	# 	def get_h_cost(cell_end, cell_current):  # dist. to end
-	# 		return self.dist_rect(cell_end, cell_current)
-	# 	def get_f_cost(cell_start, cell_current, cell_end):  # f-cost
-	# 		return get_g_cost(cell_start, cell_current)+get_h_cost(cell_end, cell_current)
-
-	# 	cells_open = [[cell_start,
-	# 	 	get_g_cost(cell_start, cell_start),
-	# 		get_f_cost(cell_start, cell_start, cell_end)]]
-	# 	cells_closed = []
-
-	# 	while cells_open:
-	# 		cell_current = min(f_score, key=cells_open) # get cell for min. f_score
-	# 		if cell_current == cell_end: pass # return reconstruct_path(came_from, current)
-	# 		cells_open.remove(cell_current)
-	# 		cells_closed.append(cell_current)
-	# 		for cell_adjacent in self.get_adjacent_cells(cell_current):
-	# 			if cell_adjacent in cells_closed or cell_adjacent == "x":
-	# 				continue
-
-	# 			tentative_g_cost = get_g_cost(cell_adjacent)
-	# 			if tentative_g_score < g_score[cell_adjacent]:
-	# 				came_from[cell_adjacent] = cell_current
-	# 				f_score[cell_adjacent] = tentative_g_score + h_score
-	# 				if cell_adjacent not in cells_open: cells_open.add(cell_adjacent)
-	# 	return 0
-
-		return LEFT
+		return path
 
 	# TODO: return list of cells of path generated by A* algorithm
 	def get_path_a_star(self, cell_start, cell_end):
+	
+		open_cells = []
+		open_cells.append(cell_start)
 
+		came_from = {}
+		#came_from[tuple(cell_start)] = None
+
+		g_cost_so_far = {} # { location: cost of cheapest known path}
+		g_cost_so_far[tuple(cell_start)] = 0
+
+		f_cost_so_far = {}
+
+		while open_cells:
+
+			if f_cost_so_far: open_cells.sort(key=lambda x: f_cost_so_far[tuple(x)])
+		
+			cell_current = open_cells[0] # cell with lowest f_cost
+
+			if cell_current == cell_end:
+				return self.reconstruct_path(came_from, cell_current)
+			
+			open_cells.remove(cell_current)
+
+			# get those adjacent cells that are not obstacles or unknown cells
+			adjacent_cells = [cell for cell in list(self.get_adjacent_cells(cell_current).values()) if (self.map_known[cell[0]][cell[1]] != "x" and self.map_known[cell[0]][cell[1]] != "?")]
+			
+			for cell_adjacent in adjacent_cells:  
+
+				tentative_g_cost = g_cost_so_far[tuple(cell_current)] + self.dist_rect(cell_current, cell_adjacent)
+
+				if tuple(cell_adjacent) not in g_cost_so_far or tentative_g_cost < g_cost_so_far[tuple(cell_adjacent)]:
+					
+					came_from[tuple(cell_adjacent)] = cell_current
+
+					g_cost_so_far[tuple(cell_adjacent)] = tentative_g_cost
+					f_cost_so_far[tuple(cell_adjacent)] = tentative_g_cost + self.dist_rect(cell_adjacent, cell_end)
+
+					if cell_adjacent not in open_cells:
+						open_cells.append(cell_adjacent)
+						open_cells.sort(key = lambda x: f_cost_so_far[tuple(x)])
+					
+		return 0 # if goal never reached
 
 
 		print("TO DO")
 		return []
 
+	# TODO: move towards tentative exploration targets. If target impossible, set new target
+	def move_explore_a_star(self, cell_current):
+
+		# if path not yet generated
+		if not self.path_a_star:
+
+			# select nearest exploration target
+			# TODO: sorting by nearest ignores obstacles!
+			self.locations_exploration_targets.sort(key = lambda x: self.dist_rect(cell_current, x))
+			self.locations_stains[0]
+
+			# generate path towards selected exploration target
+			self.path_a_star = self.get_path_a_star(cell_current, self.locations_stains[0])
+
+
+
+		# how to recognize target is impossible?
+
+		# how to set new target?
+
+
+
+
+		pass
 
 	# TODO: revised 
-	def move_stain2(self, vision, current_cell):
+	def move_stain_a_star(self, vision, cell_current):
 
-		# select cell to clean (the one most closeby to current cell)
-		self.stain_locations[0]
+		# if path not yet generated
+		if not self.path_a_star:
 
-		# generate path from current location to selected stain
-		# path_to_stain = get_path_a_star(current_cell, self.stain_locations[0])
+			# select nearest stain
+			# TODO: sorting by nearest ignores obstacles!
+			self.locations_stains.sort(key = lambda x: self.dist_rect(cell_current, x))
+			self.locations_stains[0]
 
-		# find direction to move to first upcoming location in path
-		# direction_to_move =  self.find_direction(current_cell, path_to_stain[0])
+			# generate path towards selected stain
+			self.path_a_star = self.get_path_a_star(cell_current, self.locations_stains[0])
 
+		# obtain first move
+		move = self.find_direction(cell_current, self.path_a_star[0])
 
+		# delete that cell from the path
+		del self.path_a_star[0]
 
+		return move
 
-
-		print("TO DO")
-		return LEFT
 
 	def nextMove(self, currentCell, currentEnergy, vision, remainingStainCells):
 
 		# update memory of map
 		self.map_known = self.add_vision_to_map(currentCell, vision, self.map_known)
 
-		self.print_grid(self.map_known)
+		#self.print_grid(self.map_known)
 
 		# if stains in sight, add to list 'stain_locations'
 		if self.count_chars_in_grid(vision, "@"):
 			for location_vision in self.find_chars_in_grid(vision, "@"):
 				location_map = self.convert_loc_vision_to_map(currentCell, vision, location_vision)
-				if location_map not in self.stain_locations:
-					self.stain_locations.append(location_map)
+				if location_map not in self.locations_stains:
+					self.locations_stains.append(location_map)
 		
 		# if stain visited, remove from list 'stain_locations'
-		if currentCell in self.stain_locations:
-			self.stain_locations.remove(currentCell)
+		if currentCell in self.locations_stains:
+			self.locations_stains.remove(currentCell)
 
 		# TODO sort list by closest proximity to current location (ignores obstacles!)
-		self.stain_locations.sort(key=lambda x: self.dist_rect(currentCell, x))
+		self.locations_stains.sort(key = lambda x: self.dist_rect(currentCell, x))
 
 		# add current location to history (note that back-tracking deletes visited locations!)
-		self.location_history.append(currentCell.copy())
+		self.locations_history.append(currentCell.copy())
 
 		# identify where stains might be
 		self.map_potential_stains = self.identify_potential_stains(self.map_potential_stains, self.map_known)
 
-		# if no stains in memory, explore
-		if self.stain_locations:
-			# if stains in sight, clean up stain
-			#return self.move_stain2(vision, currentCell)
-			return self.move_explore_dynamic(currentCell)
+
+		# if currentCell == [5, 5]:
+		# 	test_path_a_star = self.get_path_a_star([6,2], [6,5])
+		# 	print(test_path_a_star)
+		# 	pass
+
+
+		# TODO! currently, the bot creates a new A* path every move, forgetting about which stain it was targeting previously
+		# Instead, it should complete the path to the stain until it is finished.
+
+		if self.locations_stains:
+			# clean up stain
+			return self.move_stain_a_star(vision, currentCell)
 		else:
-			# if no stains in sight, explore
+			# explore
 			return self.move_explore_dynamic(currentCell)
