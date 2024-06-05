@@ -4,4 +4,4 @@ I submitted this code in May 2023, for an assignment from my Premaster Data Scie
 
 Below is a visual demo of the robot. 
 
-![til](https://github.com/rldekkers/msc-datascience-robot-assignment/blob/eb3aefec53200a63c6237fe765258b38443d7d5e/robotgif.gif)
+![til]((https://github.com/rldekkers/msc-datascience-robot-assignment/blob/fb2aba4d5c5174bfabc612d9f854b31069c7bbb8/animation.gif))
